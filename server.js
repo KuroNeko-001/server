@@ -118,11 +118,12 @@ app.get("/api/modelresults_engvers", async (req, res) => {
   try {
     // ดึงข้อมูลจาก MongoDB และกรองเฉพาะฟิลด์ที่ต้องการ
     const data = await ModelResult.find()
-      .sort({ timestamp: 1 }) // เรียงตาม timestamp
-      .select(
-        "timestamp sensor_data.temperature sensor_data.humidity sensor_data.co sensor_data.so2 sensor_data.no2 sensor_data.ozone sensor_data.pm2_5 sensor_data.pm10 prediction.aqi_class  prediction.aqi_label"
-      ); // เลือกเฉพาะฟิลด์ที่ต้องการ
-      console.log(data);
+    .sort({ timestamp: -1 }) // -1 = ล่าสุดมาก่อน
+    .limit(5)
+    .select(
+      "timestamp sensor_data.temperature sensor_data.humidity sensor_data.co sensor_data.so2 sensor_data.no2 sensor_data.ozone sensor_data.pm2_5 sensor_data.pm10 prediction.aqi_class prediction.aqi_label"
+    ); // เลือกเฉพาะฟิลด์ที่ต้องการ
+      
     // แปลงข้อมูลให้อยู่ในรูปแบบที่ต้องการ
     const formattedData = data.map((item) => ({
       timestamp: item.timestamp,
