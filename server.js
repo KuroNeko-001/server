@@ -58,11 +58,8 @@ const modelresults_engversSchema = new mongoose.Schema({
 });
 
 // ✅ สร้าง Model
-const ModelResult = mongoose.model(
-  "ModelResult",
-  modelresults_engversSchema,
-  "modelresults_engvers"
-);
+const ModelResult = mongoose.model("modelresults_engvers", modelresults_engversSchema);
+ 
 
 const SensorDataModel = mongoose.model("SensorData", sensorDataSchema);
 
