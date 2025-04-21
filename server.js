@@ -122,7 +122,7 @@ app.get("/api/modelresults_engvers", async (req, res) => {
       .select(
         "timestamp sensor_data.temperature sensor_data.humidity sensor_data.co sensor_data.so2 sensor_data.no2 sensor_data.ozone sensor_data.pm2_5 sensor_data.pm10 prediction.aqi_class  prediction.aqi_label"
       ); // เลือกเฉพาะฟิลด์ที่ต้องการ
-
+      console.log(data);
     // แปลงข้อมูลให้อยู่ในรูปแบบที่ต้องการ
     const formattedData = data.map((item) => ({
       timestamp: item.timestamp,
