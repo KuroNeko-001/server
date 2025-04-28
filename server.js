@@ -13,21 +13,14 @@ const port = process.env.PORT || 5001;
 const server = http.createServer(app);
 
 // ตั้งค่า CORS สำหรับ HTTP API
-app.use(
-  cors({
-    origin: ["http://localhost:3000", "https://your-frontend-domain.com"], 
-    methods: ["GET", "POST"],
-    credentials: true,
-  })
-);
+app.use(cors());
 app.use(bodyParser.json());
 
 // สร้าง Socket.IO server พร้อม CORS + fallback transports
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "https://your-frontend-domain.com"],
+    origin: "*",   // <<--- อนุญาตทุก origin
     methods: ["GET", "POST"],
-    credentials: true,
   },
   transports: ["websocket", "polling"],
 });
