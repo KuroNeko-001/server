@@ -1,36 +1,46 @@
+// server.js
 const express = require("express");
 const mongoose = require("mongoose");
 const bodyParser = require("body-parser");
 const cors = require("cors");
-const http = require("http"); 
-const { Server } = require("socket.io"); 
+const http = require("http");
+const { Server } = require("socket.io");
 
 const app = express();
-const port = 5001;
+const port = process.env.PORT || 5001;
 
+// สร้าง HTTP server และ bind กับ express
 const server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: {
-    origin: "*",
+// ตั้งค่า CORS สำหรับ HTTP API
+app.use(
+  cors({
+    origin: ["http://localhost:3000", "https://your-frontend-domain.com"], 
     methods: ["GET", "POST"],
-  },
-});
-
-app.use(cors());
+    credentials: true,
+  })
+);
 app.use(bodyParser.json());
 
+// สร้าง Socket.IO server พร้อม CORS + fallback transports
+const io = new Server(server, {
+  cors: {
+    origin: ["http://localhost:3000", "https://your-frontend-domain.com"],
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+  transports: ["websocket", "polling"],
+});
+
+// เชื่อมต่อกับ MongoDB
 const mongoURI =
   "mongodb+srv://arm:arm@aqi-senors-rf.xk5y8sk.mongodb.net/CPE495final";
-
 mongoose
-  .connect(mongoURI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log("เชื่อมต่อกับ MongoDB สำเร็จ!"))
-  .catch((err) => console.error("ไม่สามารถเชื่อมต่อกับ MongoDB ได้:", err));
+  .catch((err) => console.error("เชื่อมต่อ MongoDB ไม่สำเร็จ:", err));
 
+// ====== Schema & Model ======
 const sensorDataSchema = new mongoose.Schema({
   temperature: Number,
   humidity: Number,
@@ -42,6 +52,7 @@ const sensorDataSchema = new mongoose.Schema({
   pm10: Number,
   timestamp: { type: Date, default: Date.now },
 });
+const SensorDataModel = mongoose.model("SensorData", sensorDataSchema);
 
 const modelresults_engversSchema = new mongoose.Schema({
   timestamp: { type: Date, required: true },
@@ -62,21 +73,22 @@ const modelresults_engversSchema = new mongoose.Schema({
     aqi_label: { type: String, required: true },
   },
 });
-
-const SensorDataModel = mongoose.model("SensorData", sensorDataSchema);
 const ModelResult = mongoose.model(
   "modelresults_engvers",
   modelresults_engversSchema
 );
 
+// ====== Socket.IO ======
 io.on("connection", (socket) => {
-  console.log("Client เชื่อมต่อ:", socket.id);
-
+  console.log("📡 Client connected:", socket.id);
   socket.on("disconnect", () => {
-    console.log("Client ออก:", socket.id);
+    console.log("❌ Client disconnected:", socket.id);
   });
 });
 
+// ====== HTTP Routes ======
+
+// GET: ดึงข้อมูล SensorData ทั้งหมด
 app.get("/api/sensors", async (req, res) => {
   try {
     const allSensorData = await SensorDataModel.find();
@@ -86,21 +98,15 @@ app.get("/api/sensors", async (req, res) => {
   }
 });
 
+// POST: รับและบันทึก SensorData พร้อม broadcast ผ่าน Socket.IO
 app.post("/api/sensors", async (req, res) => {
   try {
     const { temperature, humidity, co, so2, ozone, pm2_5, pm10, no2 } =
       req.body;
 
-    if (
-      typeof temperature !== "number" ||
-      typeof humidity !== "number" ||
-      typeof co !== "number" ||
-      typeof so2 !== "number" ||
-      typeof no2 !== "number" ||
-      typeof ozone !== "number" ||
-      typeof pm2_5 !== "number" ||
-      typeof pm10 !== "number"
-    ) {
+    // validate
+    const nums = [temperature, humidity, co, so2, no2, ozone, pm2_5, pm10];
+    if (nums.some((v) => typeof v !== "number")) {
       return res
         .status(400)
         .json({ error: "ข้อมูลที่ส่งมาไม่ถูกต้อง ต้องเป็นตัวเลขทั้งหมด" });
@@ -116,11 +122,11 @@ app.post("/api/sensors", async (req, res) => {
       pm2_5,
       pm10,
     });
-
     const savedSensorData = await newSensorData.save();
 
+    // broadcast ผ่าน Socket.IO
     io.emit("sensorData", savedSensorData);
-    console.log("ส่งข้อมูลผ่าน socket แล้ว:", savedSensorData);
+    console.log("🔔 Emitted sensorData:", savedSensorData);
 
     res.status(201).json(savedSensorData);
   } catch (error) {
@@ -128,6 +134,7 @@ app.post("/api/sensors", async (req, res) => {
   }
 });
 
+// GET: ดึง ModelResult ล่าสุด 5 รายการ
 app.get("/api/modelresults_engvers", async (req, res) => {
   try {
     const data = await ModelResult.find()
@@ -136,7 +143,6 @@ app.get("/api/modelresults_engvers", async (req, res) => {
       .select(
         "timestamp sensor_data.temperature sensor_data.humidity sensor_data.co sensor_data.so2 sensor_data.no2 sensor_data.ozone sensor_data.pm2_5 sensor_data.pm10 prediction.aqi_class prediction.aqi_label"
       );
-
     const formattedData = data.map((item) => ({
       timestamp: item.timestamp,
       temperature: item.sensor_data.temperature,
@@ -150,13 +156,13 @@ app.get("/api/modelresults_engvers", async (req, res) => {
       aqi_class: item.prediction.aqi_class,
       aqi_label: item.prediction.aqi_label,
     }));
-
     res.json(formattedData);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-server.listen(port, () => {
-  console.log(`เซิร์ฟเวอร์กำลังทำงานบนพอร์ต ${port}`);
+// ====== Start Server ======
+server.listen(port, "0.0.0.0", () => {
+  console.log(`🌐 Server listening on port ${port}`);
 });
